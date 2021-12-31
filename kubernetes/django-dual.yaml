@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    sidecar.jaegertracing.io/inject: "true"
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: djangoport
+  labels:
+    name: django-dual
+    release: prometheus
+  name: django-dual
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: django-dual
+  template:
+    metadata:
+      labels:
+        app: django-dual
+    spec:
+      containers:
+      - env:
+        - name: JAEGER_HOST
+          value : my-jaeger-tracing-default-agent.default.svc.cluster.local
+        name: django-dual
+        image: linuxrobotgeek/django-dual:latest
+        imagePullPolicy: Always
+        ports:
+        - name: djangoport
+          containerPort: 8000
+          protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: django-dual
+  labels:
+    app: django-dual
+spec:
+  selector:
+    app: django-dual
+  ports:
+    - name: django-dual
+      protocol: TCP
+      port: 8000
+      targetPort: djangoport
+  type: LoadBalancer
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: django-dual
+  namespace: monitoring
+  labels:
+    app: django-dual
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: django-dual
+  endpoints:
+  - port: django-dual
+    path: /metrics
+    interval: 15s
+  namespaceSelector:
+    matchNames:
+    - default
